@@ -1,0 +1,49 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.us-all/airflow",
+  "description": "Airflow MCP — list DAGs/runs/task instances, tail logs, trigger and clear (write-gated)",
+  "repository": {
+    "url": "https://github.com/us-all/airflow-mcp-server",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@us-all/airflow-mcp",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "AIRFLOW_API_URL",
+          "description": "Airflow REST API base, e.g. 'http://airflow.example.com:8080/api/v1'.",
+          "isRequired": true
+        },
+        {
+          "name": "AIRFLOW_USERNAME",
+          "description": "Airflow basic-auth username."
+        },
+        {
+          "name": "AIRFLOW_PASSWORD",
+          "description": "Airflow basic-auth password.",
+          "isSecret": true
+        },
+        {
+          "name": "AIRFLOW_ALLOW_WRITE",
+          "description": "Set to 'true' to enable trigger-dag and clear-task tools. Default read-only.",
+          "default": "false"
+        },
+        {
+          "name": "AIRFLOW_TOOLS",
+          "description": "Comma-separated category allowlist (airflow,meta)."
+        },
+        {
+          "name": "AIRFLOW_DISABLE",
+          "description": "Comma-separated category disablelist."
+        }
+      ]
+    }
+  ]
+}
