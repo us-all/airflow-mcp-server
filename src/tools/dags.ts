@@ -3,7 +3,7 @@ import { airflowFetch, type AirflowDag, type AirflowDagRun, type AirflowTaskInst
 import { assertWriteAllowed } from "./utils.js";
 
 export const airflowListDagsSchema = z.object({
-  onlyActive: z.boolean().default(true),
+  onlyActive: z.boolean().default(true).describe("Filter out paused DAGs (Airflow 3.x: is_paused=false)"),
   tag: z.string().optional().describe("Filter to DAGs that carry this tag"),
   search: z.string().optional().describe("Substring match on dag_id (case-insensitive)"),
   limit: z.coerce.number().int().min(1).max(500).default(100),
@@ -12,7 +12,7 @@ export const airflowListDagsSchema = z.object({
 export async function airflowListDags(args: z.infer<typeof airflowListDagsSchema>): Promise<unknown> {
   const qs = new URLSearchParams();
   qs.set("limit", String(args.limit));
-  if (args.onlyActive) qs.set("only_active", "true");
+  if (args.onlyActive) qs.set("paused", "false");
   if (args.tag) qs.append("tags", args.tag);
   const data = await airflowFetch<{ dags: AirflowDag[]; total_entries: number }>(
     `/dags?${qs.toString()}`,
@@ -27,27 +27,34 @@ export async function airflowListDags(args: z.infer<typeof airflowListDagsSchema
     count: dags.length,
     dags: dags.map((d) => ({
       dagId: d.dag_id,
-      isActive: d.is_active,
+      displayName: d.dag_display_name,
       isPaused: d.is_paused,
+      isStale: d.is_stale,
       description: d.description,
-      schedule: typeof d.schedule_interval === "object" ? d.schedule_interval?.value : d.schedule_interval,
-      owners: d.owners,
+      schedule:
+        d.timetable_summary ??
+        (typeof d.schedule_interval === "object" ? d.schedule_interval?.value : d.schedule_interval),
+      timetable: d.timetable_description,
+      bundle: d.bundle_name,
+      fileloc: d.relative_fileloc ?? d.fileloc,
       tags: d.tags?.map((t) => t.name) ?? [],
-      nextDagrun: d.next_dagrun,
+      nextDagrun: d.next_dagrun_logical_date ?? d.next_dagrun,
+      lastParsedTime: d.last_parsed_time,
     })),
   };
 }
 
 export const airflowListRunsSchema = z.object({
   dagId: z.string().describe("Airflow DAG id"),
-  state: z.string().optional().describe("Filter by state (success | running | failed | queued | ...)"),
+  state: z.string().optional().describe("Filter by state (success | running | failed | queued | up_for_retry | ...)"),
   limit: z.coerce.number().int().min(1).max(200).default(20),
 });
 
 export async function airflowListRuns(args: z.infer<typeof airflowListRunsSchema>): Promise<unknown> {
   const qs = new URLSearchParams();
   qs.set("limit", String(args.limit));
-  qs.set("order_by", "-execution_date");
+  // Airflow 3.x v2 uses logical_date (formerly execution_date in v1)
+  qs.set("order_by", "-logical_date");
   if (args.state) qs.append("state", args.state);
   const data = await airflowFetch<{ dag_runs: AirflowDagRun[]; total_entries: number }>(
     `/dags/${encodeURIComponent(args.dagId)}/dagRuns?${qs.toString()}`,
@@ -59,10 +66,15 @@ export async function airflowListRuns(args: z.infer<typeof airflowListRunsSchema
     runs: data.dag_runs.map((r) => ({
       dagRunId: r.dag_run_id,
       state: r.state,
-      executionDate: r.execution_date,
+      logicalDate: r.logical_date ?? r.execution_date,
+      runType: r.run_type,
       startDate: r.start_date,
       endDate: r.end_date,
-      externalTrigger: r.external_trigger,
+      duration: r.duration,
+      queuedAt: r.queued_at,
+      runAfter: r.run_after,
+      triggeredBy: r.triggered_by,
+      triggeringUser: r.triggering_user_name,
       conf: r.conf,
       note: r.note,
     })),
@@ -131,6 +143,7 @@ export const airflowTriggerDagSchema = z.object({
   dagRunId: z.string().optional().describe("Optional run id; auto-generated if omitted"),
   conf: z.record(z.string(), z.unknown()).optional().describe("DAG run conf payload"),
   note: z.string().optional().describe("Optional note attached to the run"),
+  logicalDate: z.string().optional().describe("Optional logical_date (ISO 8601) — Airflow 3.x replacement for execution_date"),
 });
 
 export async function airflowTriggerDag(args: z.infer<typeof airflowTriggerDagSchema>): Promise<unknown> {
@@ -139,6 +152,7 @@ export async function airflowTriggerDag(args: z.infer<typeof airflowTriggerDagSc
   if (args.dagRunId) body.dag_run_id = args.dagRunId;
   if (args.conf) body.conf = args.conf;
   if (args.note) body.note = args.note;
+  if (args.logicalDate) body.logical_date = args.logicalDate;
   const data = await airflowFetch<AirflowDagRun>(
     `/dags/${encodeURIComponent(args.dagId)}/dagRuns`,
     { method: "POST", body: JSON.stringify(body) },
@@ -148,7 +162,7 @@ export async function airflowTriggerDag(args: z.infer<typeof airflowTriggerDagSc
     dagId: data.dag_id,
     dagRunId: data.dag_run_id,
     state: data.state,
-    executionDate: data.execution_date,
+    logicalDate: data.logical_date ?? data.execution_date,
   };
 }
 

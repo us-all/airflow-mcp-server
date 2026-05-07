@@ -2,7 +2,7 @@
 
 > Airflow MCP server — read DAGs, runs, task instances, log tails; trigger and clear (write-gated). Built on `@us-all/mcp-toolkit`.
 
-A focused MCP for the Airflow Stable REST API. Read by default; `airflow-trigger-dag` and `airflow-clear-task` are gated behind `AIRFLOW_ALLOW_WRITE=true`.
+A focused MCP for the Airflow 3.x REST API (`/api/v2`). Read by default; `airflow-trigger-dag` and `airflow-clear-task` are gated behind `AIRFLOW_ALLOW_WRITE=true`. Auth is JWT via SimpleAuthManager — supply `AIRFLOW_USERNAME` + `AIRFLOW_PASSWORD` and the server mints/refreshes the token transparently.
 
 For deeper dbt integration (manifest parsing, run-results history, source freshness, per-column test coverage, lineage walks, custom DQ result tables), install the companion **[@us-all/dbt-mcp](https://www.npmjs.com/package/@us-all/dbt-mcp)** alongside.
 
@@ -19,10 +19,12 @@ pnpm add -D @us-all/airflow-mcp
 ## Run
 
 ```bash
-AIRFLOW_API_URL=http://airflow.example.com:8080/api/v1 \
+AIRFLOW_API_URL=http://airflow.example.com:8080 \
 AIRFLOW_USERNAME=admin AIRFLOW_PASSWORD=... \
 npx @us-all/airflow-mcp
 ```
+
+Pass the host base only — the server prepends `/api/v2` internally. A trailing `/api/v1` or `/api/v2` is stripped if supplied. JWT tokens are cached for the lifetime of the session and refreshed 1 minute before they expire.
 
 The server speaks MCP stdio; wire it into Claude Desktop / Cursor / any MCP client. Set `MCP_TRANSPORT=http` to opt in to Streamable HTTP transport (Bearer auth, `/health` endpoint).
 
@@ -55,15 +57,15 @@ The server speaks MCP stdio; wire it into Claude Desktop / Cursor / any MCP clie
 
 | Env | Required | Notes |
 |-----|----------|-------|
-| `AIRFLOW_API_URL` | yes | Airflow REST API base, e.g. `http://airflow.example.com:8080/api/v1` |
-| `AIRFLOW_USERNAME` | no | Basic-auth username |
-| `AIRFLOW_PASSWORD` | no | Basic-auth password (secret) |
+| `AIRFLOW_API_URL` | yes | Airflow host base, e.g. `http://airflow.example.com:8080`. Trailing `/api/v1` or `/api/v2` is stripped if present |
+| `AIRFLOW_USERNAME` | yes | Username for JWT minting via SimpleAuthManager `/auth/token` |
+| `AIRFLOW_PASSWORD` | yes | Password for JWT minting (secret) |
 | `AIRFLOW_ALLOW_WRITE` | no | `true` enables `airflow-trigger-dag` / `airflow-clear-task` |
 | `AIRFLOW_TOOLS` / `AIRFLOW_DISABLE` | no | Category toggles |
 
 ## Tested-against schemas
 
-- Airflow Stable REST API (2.x). Airflow 3.x exposes the same surface via the `/api/v1/` Stable endpoints, so this server works with both 2.x and 3.x deployments.
+- Airflow 3.x `/api/v2` (current default). Airflow 2.x is **not** supported by v0.2 because basic auth + `/api/v1` were removed; pin to `@us-all/airflow-mcp@0.1.0` for Airflow 2.x deployments.
 
 ## Companion server
 

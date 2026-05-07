@@ -6,7 +6,7 @@
 
 `@us-all/airflow-mcp` — Airflow Stable REST API를 stdio MCP로 노출. **7 도구 + 2 Prompts**. read-only 기본, trigger/clear는 `AIRFLOW_ALLOW_WRITE=true` 게이트.
 
-- **타겟**: Airflow 2.x Stable API (Airflow 3.x도 호환 — `/api/v1/` 그대로 사용)
+- **타겟**: Airflow 3.x `/api/v2` + JWT (SimpleAuthManager). Airflow 2.x basic auth는 v0.1.x로 핀.
 - **표준**: [@us-all MCP Standard](https://github.com/us-all/mcp-toolkit/blob/main/STANDARD.md) 준수
 - **Companion**: dbt 자산은 별도 [`@us-all/dbt-mcp`](https://github.com/us-all/dbt-mcp-server)
 
@@ -56,12 +56,15 @@ pnpm smoke              # AIRFLOW_API_URL 설정 후 spawn + tools/list + airflo
 
 ## 인증
 
-v0.1.0은 **basic auth만**. `AIRFLOW_USERNAME` + `AIRFLOW_PASSWORD`로 `Authorization: Basic <base64>` 헤더 자동 첨부. 토큰 기반 인증(JWT/OAuth)은 v0.2 후보.
+v0.2부터 **JWT via SimpleAuthManager**. `AIRFLOW_USERNAME` + `AIRFLOW_PASSWORD`로 `POST /auth/token` 호출 → access_token 받아 `Authorization: Bearer <token>` 헤더 첨부. 토큰은 in-process 캐시 + JWT exp 클레임 기반 자동 갱신 (만료 1분 전 재발급, 401 응답 시 캐시 무효화).
+
+`AIRFLOW_API_URL`은 host base만 받고 (`http://host:port`) 내부에서 `/api/v2` prepend. 트레일링 `/api/v1` `/api/v2`는 strip.
 
 ## 알려진 제약
 
-- Airflow 3.x의 새로운 `/api/v2/`는 미지원 (v0.2). v1 Stable API는 모든 동작에 충분 — Airflow 3.x도 v1 엔드포인트 호환 유지.
+- Airflow 2.x 미지원 (basic auth + `/api/v1` 의존성 제거됨). 2.x 사용자는 `@us-all/airflow-mcp@0.1.0`로 pin.
 - `airflow-get-task-logs`는 단일 try_number 한 호출. 다중 try 비교는 클라이언트 측에서 여러 번 호출.
+- OAuth/외부 IDP 인증은 미지원. SimpleAuthManager만 검증됨.
 
 ## 표준 가이드
 

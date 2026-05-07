@@ -6,28 +6,30 @@
     "url": "https://github.com/us-all/airflow-mcp-server",
     "source": "github"
   },
-  "version": "0.1.0",
+  "version": "0.2.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@us-all/airflow-mcp",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "transport": {
         "type": "stdio"
       },
       "environmentVariables": [
         {
           "name": "AIRFLOW_API_URL",
-          "description": "Airflow REST API base, e.g. 'http://airflow.example.com:8080/api/v1'.",
+          "description": "Airflow host base, e.g. 'http://airflow.example.com:8080'. Server prepends /api/v2 internally; trailing /api/v1 or /api/v2 is stripped if supplied.",
           "isRequired": true
         },
         {
           "name": "AIRFLOW_USERNAME",
-          "description": "Airflow basic-auth username."
+          "description": "Airflow username (used to mint a JWT via SimpleAuthManager /auth/token).",
+          "isRequired": true
         },
         {
           "name": "AIRFLOW_PASSWORD",
-          "description": "Airflow basic-auth password.",
+          "description": "Airflow password (used to mint a JWT via SimpleAuthManager /auth/token).",
+          "isRequired": true,
           "isSecret": true
         },
         {

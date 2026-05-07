@@ -7,8 +7,20 @@ function parseList(raw: string | undefined): string[] | null {
   return raw.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 }
 
+/**
+ * Normalize the user-supplied AIRFLOW_API_URL into the host base — strip a
+ * trailing /api/v1 or /api/v2 since this server (v0.2+) targets Airflow 3.x
+ * v2 endpoints exclusively and prepends /api/v2 internally.
+ */
+function normalizeBase(raw: string): string {
+  const trimmed = raw.replace(/\/+$/, "");
+  return trimmed.replace(/\/api\/v[12]$/, "");
+}
+
+const rawUrl = (process.env.AIRFLOW_API_URL ?? "").trim();
+
 export const config = {
-  apiUrl: (process.env.AIRFLOW_API_URL ?? "").replace(/\/+$/, ""),
+  apiBase: rawUrl ? normalizeBase(rawUrl) : "",
   username: process.env.AIRFLOW_USERNAME ?? "",
   password: process.env.AIRFLOW_PASSWORD ?? "",
   allowWrite: process.env.AIRFLOW_ALLOW_WRITE === "true",
@@ -17,12 +29,12 @@ export const config = {
 };
 
 export function validateConfig(): void {
-  if (!config.apiUrl) {
+  if (!config.apiBase) {
     throw new Error("AIRFLOW_API_URL environment variable is required");
   }
-  if (!config.username) {
+  if (!config.username || !config.password) {
     process.stderr.write(
-      "[airflow-mcp] WARN: AIRFLOW_USERNAME not set — calls will be sent unauthenticated\n",
+      "[airflow-mcp] WARN: AIRFLOW_USERNAME or AIRFLOW_PASSWORD not set — JWT token cannot be minted; calls will fail\n",
     );
   }
 }
