@@ -69,28 +69,31 @@ export async function airflowFetch<T = unknown>(
   if (!config.apiBase) {
     throw new Error("AIRFLOW_API_URL is not configured");
   }
-  const token = await getValidToken();
   const url = `${config.apiBase}/api/v2${path.startsWith("/") ? "" : "/"}${path}`;
-  const headers = new Headers(init.headers);
-  headers.set("Authorization", `Bearer ${token}`);
-  if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-  headers.set("Accept", "application/json");
-  const res = await fetch(url, { ...init, headers });
-  const text = await res.text();
-  let body: unknown;
-  try { body = text ? JSON.parse(text) : null; } catch { body = text; }
-  if (!res.ok) {
-    if (res.status === 401) {
-      // Token may have rotated — invalidate cache and let caller retry one
-      tokenCache = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const token = await getValidToken();
+    const headers = new Headers(init.headers);
+    headers.set("Authorization", `Bearer ${token}`);
+    if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+    headers.set("Accept", "application/json");
+    const res = await fetch(url, { ...init, headers });
+    const text = await res.text();
+    let body: unknown;
+    try { body = text ? JSON.parse(text) : null; } catch { body = text; }
+    if (!res.ok) {
+      if (res.status === 401 && attempt === 0) {
+        tokenCache = null;
+        continue;
+      }
+      throw new AirflowApiError(
+        res.status,
+        body,
+        `Airflow API ${init.method ?? "GET"} ${path} failed: ${res.status} ${res.statusText}`,
+      );
     }
-    throw new AirflowApiError(
-      res.status,
-      body,
-      `Airflow API ${init.method ?? "GET"} ${path} failed: ${res.status} ${res.statusText}`,
-    );
+    return body as T;
   }
-  return body as T;
+  throw new Error("unreachable");
 }
 
 // --- Airflow 3.x v2 response shapes ---

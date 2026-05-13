@@ -1,12 +1,16 @@
 import { z } from "zod";
+import { extractFieldsDescription } from "@us-all/mcp-toolkit";
 import { airflowFetch, type AirflowDag, type AirflowDagRun, type AirflowTaskInstance } from "../clients/airflow.js";
 import { assertWriteAllowed } from "./utils.js";
+
+const ef = z.string().optional().describe(extractFieldsDescription);
 
 export const airflowListDagsSchema = z.object({
   onlyActive: z.boolean().default(true).describe("Filter out paused DAGs (Airflow 3.x: is_paused=false)"),
   tag: z.string().optional().describe("Filter to DAGs that carry this tag"),
   search: z.string().optional().describe("Substring match on dag_id (case-insensitive)"),
   limit: z.coerce.number().int().min(1).max(500).default(100),
+  extractFields: ef,
 });
 
 export async function airflowListDags(args: z.infer<typeof airflowListDagsSchema>): Promise<unknown> {
@@ -48,6 +52,7 @@ export const airflowListRunsSchema = z.object({
   dagId: z.string().describe("Airflow DAG id"),
   state: z.string().optional().describe("Filter by state (success | running | failed | queued | up_for_retry | ...)"),
   limit: z.coerce.number().int().min(1).max(200).default(20),
+  extractFields: ef,
 });
 
 export async function airflowListRuns(args: z.infer<typeof airflowListRunsSchema>): Promise<unknown> {
@@ -84,6 +89,7 @@ export async function airflowListRuns(args: z.infer<typeof airflowListRunsSchema
 export const airflowGetTaskInstancesSchema = z.object({
   dagId: z.string(),
   dagRunId: z.string().describe("dag_run_id (e.g. 'scheduled__2026-05-06T00:00:00+00:00')"),
+  extractFields: ef,
 });
 
 export async function airflowGetTaskInstances(
@@ -116,17 +122,21 @@ export const airflowGetTaskLogsSchema = z.object({
   taskId: z.string(),
   tryNumber: z.coerce.number().int().min(1).default(1),
   tailKb: z.coerce.number().int().min(1).max(64).default(16).describe("Return only the last N kilobytes of log"),
+  extractFields: ef,
 });
 
 export async function airflowGetTaskLogs(args: z.infer<typeof airflowGetTaskLogsSchema>): Promise<unknown> {
   const path = `/dags/${encodeURIComponent(args.dagId)}/dagRuns/${encodeURIComponent(args.dagRunId)}/taskInstances/${encodeURIComponent(args.taskId)}/logs/${args.tryNumber}?full_content=true`;
   const data = await airflowFetch<{ content?: string; continuation_token?: unknown }>(path);
-  let content = data.content ?? "";
+  const fullContent = data.content ?? "";
   const limit = args.tailKb * 1024;
-  let truncated = false;
-  if (content.length > limit) {
-    truncated = true;
-    content = content.slice(content.length - limit);
+  const bytes = Buffer.from(fullContent, "utf8");
+  const truncated = bytes.length > limit;
+  let content = fullContent;
+  if (truncated) {
+    let start = bytes.length - limit;
+    while (start < bytes.length && (bytes[start]! & 0xc0) === 0x80) start += 1;
+    content = bytes.subarray(start).toString("utf8");
   }
   return {
     dagId: args.dagId,
@@ -134,6 +144,7 @@ export async function airflowGetTaskLogs(args: z.infer<typeof airflowGetTaskLogs
     taskId: args.taskId,
     tryNumber: args.tryNumber,
     truncated,
+    bytesReturned: Buffer.byteLength(content, "utf8"),
     content,
   };
 }

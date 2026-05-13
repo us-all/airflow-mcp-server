@@ -6,12 +6,12 @@
     "url": "https://github.com/us-all/airflow-mcp-server",
     "source": "github"
   },
-  "version": "0.2.0",
+  "version": "1.0.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@us-all/airflow-mcp",
-      "version": "0.2.0",
+      "version": "1.0.0",
       "transport": {
         "type": "stdio"
       },

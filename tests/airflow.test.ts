@@ -98,6 +98,30 @@ describe("airflow-mcp v0.2 (Airflow 3.x v2 API + JWT)", () => {
     expect(apiCalls.length).toBe(2);
   });
 
+  it("401 from API invalidates cached JWT and transparently retries once", async () => {
+    let tokenMintCount = 0;
+    let apiCount = 0;
+    const { fn, calls } = makeFetchMock({
+      "/auth/token": () => {
+        tokenMintCount += 1;
+        return new Response(JSON.stringify({ access_token: tokenResponse() }), { status: 200 });
+      },
+      "/api/v2/dags": () => {
+        apiCount += 1;
+        if (apiCount === 1) {
+          return new Response(JSON.stringify({ detail: "token expired" }), { status: 401 });
+        }
+        return new Response(JSON.stringify({ dags: [], total_entries: 0 }), { status: 200 });
+      },
+    });
+    globalThis.fetch = fn;
+    const { airflowListDags } = await import("../src/tools/dags.js");
+    const r = (await airflowListDags({ onlyActive: true, limit: 10 })) as { count: number };
+    expect(r.count).toBe(0);
+    expect(tokenMintCount).toBe(2);
+    expect(calls.filter((c) => c.url.includes("/api/v2/dags")).length).toBe(2);
+  });
+
   it("trigger-dag is blocked when AIRFLOW_ALLOW_WRITE != 'true'", async () => {
     delete process.env.AIRFLOW_ALLOW_WRITE;
     vi.resetModules();
@@ -142,6 +166,22 @@ describe("airflow-mcp v0.2 (Airflow 3.x v2 API + JWT)", () => {
     expect(r.truncated).toBe(true);
     expect(r.content.endsWith("TAIL_MARKER")).toBe(true);
     expect(r.content.length).toBeLessThanOrEqual(16 * 1024);
+  });
+
+  it("get-task-logs tails by UTF-8 bytes without splitting multibyte characters", async () => {
+    const longContent = "A".repeat(2048) + "한".repeat(20) + "TAIL";
+    const { fn } = makeFetchMock({
+      "/auth/token": () => new Response(JSON.stringify({ access_token: tokenResponse() }), { status: 200 }),
+      "/logs/": () => new Response(JSON.stringify({ content: longContent }), { status: 200 }),
+    });
+    globalThis.fetch = fn;
+    const { airflowGetTaskLogs } = await import("../src/tools/dags.js");
+    const r = (await airflowGetTaskLogs({ dagId: "dbt_daily", dagRunId: "x", taskId: "compile", tryNumber: 1, tailKb: 1 })) as { truncated: boolean; content: string; bytesReturned: number };
+    expect(r.truncated).toBe(true);
+    expect(r.content).not.toContain("\uFFFD");
+    expect(r.content.endsWith("TAIL")).toBe(true);
+    expect(r.bytesReturned).toBeLessThanOrEqual(1024);
+    expect(Buffer.byteLength(r.content, "utf8")).toBe(r.bytesReturned);
   });
 
   it("dag-health-rollup computes success rate + last failed run + failing tasks (v2 logical_date)", async () => {

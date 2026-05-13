@@ -1,10 +1,14 @@
 import { z } from "zod";
+import { extractFieldsDescription } from "@us-all/mcp-toolkit";
 import { airflowListRuns, airflowGetTaskInstances } from "./dags.js";
+
+const ef = z.string().optional().describe(extractFieldsDescription);
 
 export const dagHealthRollupSchema = z.object({
   dagId: z.string().describe("Airflow DAG id"),
   recentRuns: z.coerce.number().int().min(1).max(100).default(10),
   includeFailingTasks: z.boolean().default(true).describe("If true, fetch task instances for the most recent failed run"),
+  extractFields: ef,
 });
 
 interface DagRunOut {
