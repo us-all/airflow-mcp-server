@@ -65,7 +65,7 @@ The server speaks MCP stdio; wire it into Claude Desktop / Cursor / any MCP clie
 
 ## Tested-against schemas
 
-- Airflow 3.x `/api/v2` (current default). Airflow 2.x is **not** supported by v0.2 because basic auth + `/api/v1` were removed; pin to `@us-all/airflow-mcp@0.1.0` for Airflow 2.x deployments.
+- Airflow 3.0–3.2 `/api/v2` (verified against 3.2.1, current Airflow release as of 2026-05). Airflow 2.x is **not** supported by v0.2+ because basic auth + `/api/v1` were removed; pin to `@us-all/airflow-mcp@0.1.0` for Airflow 2.x deployments.
 
 ## Companion server
 

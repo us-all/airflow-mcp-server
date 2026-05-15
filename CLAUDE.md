@@ -6,7 +6,7 @@
 
 `@us-all/airflow-mcp` — Airflow Stable REST API를 stdio MCP로 노출. **7 도구 + 2 Prompts**. read-only 기본, trigger/clear는 `AIRFLOW_ALLOW_WRITE=true` 게이트.
 
-- **타겟**: Airflow 3.x `/api/v2` + JWT (SimpleAuthManager). Airflow 2.x basic auth는 v0.1.x로 핀.
+- **타겟**: Airflow 3.0–3.2 `/api/v2` + JWT (SimpleAuthManager). 3.2.1까지 verified (2026-05 기준). Airflow 2.x basic auth는 v0.1.x로 핀.
 - **표준**: [@us-all MCP Standard](https://github.com/us-all/mcp-toolkit/blob/main/STANDARD.md) 준수
 - **Companion**: dbt 자산은 별도 [`@us-all/dbt-mcp`](https://github.com/us-all/dbt-mcp-server)
 
