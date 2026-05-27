@@ -125,10 +125,47 @@ export const airflowGetTaskLogsSchema = z.object({
   extractFields: ef,
 });
 
+// Airflow 3.x returns task logs as structured JSON entries when Accept: application/json.
+// `content` is an array of log records (or, on some deployments, a plain string).
+interface AirflowLogEntry {
+  timestamp?: string;
+  level?: string;
+  event?: string;
+  logger?: string;
+  error_detail?: unknown;
+  [k: string]: unknown;
+}
+
+function renderLogContent(content: string | AirflowLogEntry[] | undefined): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((entry) => {
+      if (typeof entry === "string") return entry;
+      if (entry && typeof entry === "object") {
+        const ts = typeof entry.timestamp === "string" ? entry.timestamp : "";
+        const lvl = typeof entry.level === "string" ? entry.level : "";
+        const msg = typeof entry.event === "string" ? entry.event : "";
+        const prefix = `${ts ? ts + " " : ""}${lvl ? `[${lvl}] ` : ""}`;
+        let line = `${prefix}${msg}`;
+        if (entry.error_detail != null) {
+          const detail =
+            typeof entry.error_detail === "string"
+              ? entry.error_detail
+              : JSON.stringify(entry.error_detail);
+          line += `\n${prefix}${detail}`;
+        }
+        return line;
+      }
+      return String(entry ?? "");
+    })
+    .join("\n");
+}
+
 export async function airflowGetTaskLogs(args: z.infer<typeof airflowGetTaskLogsSchema>): Promise<unknown> {
   const path = `/dags/${encodeURIComponent(args.dagId)}/dagRuns/${encodeURIComponent(args.dagRunId)}/taskInstances/${encodeURIComponent(args.taskId)}/logs/${args.tryNumber}?full_content=true`;
-  const data = await airflowFetch<{ content?: string; continuation_token?: unknown }>(path);
-  const fullContent = data.content ?? "";
+  const data = await airflowFetch<{ content?: string | AirflowLogEntry[]; continuation_token?: unknown }>(path);
+  const fullContent = renderLogContent(data.content);
   const limit = args.tailKb * 1024;
   const bytes = Buffer.from(fullContent, "utf8");
   const truncated = bytes.length > limit;

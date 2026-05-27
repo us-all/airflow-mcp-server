@@ -184,6 +184,30 @@ describe("airflow-mcp v0.2 (Airflow 3.x v2 API + JWT)", () => {
     expect(Buffer.byteLength(r.content, "utf8")).toBe(r.bytesReturned);
   });
 
+  it("get-task-logs flattens Airflow 3.x structured JSON content (array of entries)", async () => {
+    const structured = [
+      { event: "::group::Log message source details", sources: ["/opt/airflow/logs/.../attempt=2.log"] },
+      { timestamp: "2026-05-27T18:07:47.109322Z", level: "info", event: "Failure in model view_crm_campus_profiles" },
+      {
+        timestamp: "2026-05-27T18:07:47.110281Z",
+        level: "info",
+        event: "Database Error in model view_crm_campus_profiles",
+        error_detail: "Not found: Dataset us-service-data:us_campus was not found in location asia-northeast3",
+      },
+    ];
+    const { fn } = makeFetchMock({
+      "/auth/token": () => new Response(JSON.stringify({ access_token: tokenResponse() }), { status: 200 }),
+      "/logs/": () => new Response(JSON.stringify({ content: structured }), { status: 200 }),
+    });
+    globalThis.fetch = fn;
+    const { airflowGetTaskLogs } = await import("../src/tools/dags.js");
+    const r = (await airflowGetTaskLogs({ dagId: "dbt_daily", dagRunId: "x", taskId: "dbt_run", tryNumber: 2, tailKb: 16 })) as { truncated: boolean; content: string };
+    expect(r.truncated).toBe(false);
+    expect(r.content).toContain("[info] Failure in model view_crm_campus_profiles");
+    expect(r.content).toContain("us_campus was not found in location asia-northeast3");
+    expect(r.content).toContain("2026-05-27T18:07:47.109322Z");
+  });
+
   it("dag-health-rollup computes success rate + last failed run + failing tasks (v2 logical_date)", async () => {
     const { fn } = makeFetchMock({
       "/auth/token": () => new Response(JSON.stringify({ access_token: tokenResponse() }), { status: 200 }),
