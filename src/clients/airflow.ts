@@ -49,6 +49,13 @@ function decodeJwtExp(token: string): number | null {
 }
 
 async function getValidToken(): Promise<string> {
+  // External Bearer mode: caller supplies a pre-minted token. We don't cache
+  // or refresh — the env var is the source of truth and the caller owns its
+  // lifetime. Expired tokens surface as Airflow's own 401.
+  if (config.bearerToken) {
+    return config.bearerToken;
+  }
+
   const now = Date.now();
   if (tokenCache && tokenCache.expiresAt - TOKEN_REFRESH_MARGIN_MS > now) {
     return tokenCache.token;

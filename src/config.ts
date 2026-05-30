@@ -23,6 +23,11 @@ export const config = {
   apiBase: rawUrl ? normalizeBase(rawUrl) : "",
   username: process.env.AIRFLOW_USERNAME ?? "",
   password: process.env.AIRFLOW_PASSWORD ?? "",
+  // Pre-minted Bearer token from an external IDP (Auth0, Okta, kubectl/OIDC, etc.).
+  // When set, the server skips the SimpleAuthManager /auth/token mint path and
+  // sends `Authorization: Bearer <token>` as-is. The caller owns refresh;
+  // expired tokens surface as the original 401 from Airflow.
+  bearerToken: process.env.AIRFLOW_BEARER_TOKEN ?? "",
   allowWrite: process.env.AIRFLOW_ALLOW_WRITE === "true",
   enabledCategories: parseList(process.env.AIRFLOW_TOOLS),
   disabledCategories: parseList(process.env.AIRFLOW_DISABLE),
@@ -32,9 +37,10 @@ export function validateConfig(): void {
   if (!config.apiBase) {
     throw new Error("AIRFLOW_API_URL environment variable is required");
   }
+  if (config.bearerToken) return; // external Bearer wins; username/password optional
   if (!config.username || !config.password) {
     process.stderr.write(
-      "[airflow-mcp] WARN: AIRFLOW_USERNAME or AIRFLOW_PASSWORD not set — JWT token cannot be minted; calls will fail\n",
+      "[airflow-mcp] WARN: neither AIRFLOW_BEARER_TOKEN nor (AIRFLOW_USERNAME + AIRFLOW_PASSWORD) is set — JWT cannot be minted; calls will fail\n",
     );
   }
 }

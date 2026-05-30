@@ -283,6 +283,59 @@ describe("airflow-mcp v0.2 (Airflow 3.x v2 API + JWT)", () => {
     expect(tokenMints).toBe(1);
   });
 
+  it("AIRFLOW_BEARER_TOKEN bypasses /auth/token and sends the env token verbatim", async () => {
+    let mintCalled = false;
+    const { fn, calls } = makeFetchMock({
+      "/auth/token": () => {
+        mintCalled = true;
+        return new Response(JSON.stringify({ access_token: tokenResponse() }), { status: 200 });
+      },
+      "/api/v2/dags": () =>
+        new Response(JSON.stringify({ dags: [], total_entries: 0 }), { status: 200 }),
+    });
+    globalThis.fetch = fn;
+    process.env.AIRFLOW_BEARER_TOKEN = "external-idp-token-abc";
+    try {
+      vi.resetModules();
+      const mod = await import("../src/clients/airflow.js");
+      mod._resetTokenCacheForTest();
+      const { airflowListDags } = await import("../src/tools/dags.js");
+      await airflowListDags({ onlyActive: true, limit: 10 });
+
+      expect(mintCalled).toBe(false);
+      const dagsCall = calls.find((c) => c.url.includes("/api/v2/dags"));
+      expect(dagsCall?.headers.get("Authorization")).toBe("Bearer external-idp-token-abc");
+    } finally {
+      delete process.env.AIRFLOW_BEARER_TOKEN;
+    }
+  });
+
+  it("validateConfig accepts AIRFLOW_BEARER_TOKEN alone (no username/password warn)", async () => {
+    delete process.env.AIRFLOW_USERNAME;
+    delete process.env.AIRFLOW_PASSWORD;
+    process.env.AIRFLOW_BEARER_TOKEN = "x";
+    try {
+      vi.resetModules();
+      const { validateConfig } = await import("../src/config.js");
+      const writes: string[] = [];
+      const origWrite = process.stderr.write.bind(process.stderr);
+      process.stderr.write = ((chunk: string | Uint8Array) => {
+        writes.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString());
+        return true;
+      }) as typeof process.stderr.write;
+      try {
+        expect(() => validateConfig()).not.toThrow();
+      } finally {
+        process.stderr.write = origWrite;
+      }
+      expect(writes.join("")).not.toMatch(/WARN/);
+    } finally {
+      delete process.env.AIRFLOW_BEARER_TOKEN;
+      process.env.AIRFLOW_USERNAME = "admin";
+      process.env.AIRFLOW_PASSWORD = "test-pw";
+    }
+  });
+
   it("token refresh after failed mint is not poisoned (in-flight cleared on error)", async () => {
     let tokenAttempts = 0;
     const { fn } = makeFetchMock({
