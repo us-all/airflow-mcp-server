@@ -252,6 +252,85 @@ describe("airflow-mcp v0.2 (Airflow 3.x v2 API + JWT)", () => {
     expect(r.lastFailureTasks).toEqual([{ taskId: "run", state: "failed", duration: 80 }]);
   });
 
+  it("airflow-list-assets sends /api/v2/assets with uri_pattern and repeated dag_ids", async () => {
+    const { fn, calls } = makeFetchMock({
+      "/auth/token": () => new Response(JSON.stringify({ access_token: tokenResponse() }), { status: 200 }),
+      "/api/v2/assets": () =>
+        new Response(
+          JSON.stringify({
+            assets: [
+              {
+                id: 7,
+                uri: "s3://my-bucket/orders",
+                producing_tasks: [{ dag_id: "ingest", task_id: "write_orders" }],
+                consuming_dags: [{ dag_id: "transform" }, { dag_id: "metrics" }],
+                updated_at: "2026-05-30T00:00:00Z",
+              },
+            ],
+            total_entries: 1,
+          }),
+          { status: 200 },
+        ),
+    });
+    globalThis.fetch = fn;
+    const { airflowListAssets } = await import("../src/tools/assets.js");
+    const result = (await airflowListAssets({
+      uriPattern: "s3://my-bucket/",
+      dagIds: ["ingest", "transform"],
+      limit: 50,
+      offset: 0,
+    })) as { totalEntries: number; assets: Array<{ uri: string; producingTasks: unknown[]; consumingDags: string[] }> };
+
+    const assetsCall = calls.find((c) => c.url.includes("/api/v2/assets"));
+    expect(assetsCall?.url).toContain("uri_pattern=s3%3A%2F%2Fmy-bucket%2F");
+    expect(assetsCall?.url).toContain("dag_ids=ingest");
+    expect(assetsCall?.url).toContain("dag_ids=transform");
+
+    expect(result.totalEntries).toBe(1);
+    expect(result.assets[0]!.uri).toBe("s3://my-bucket/orders");
+    expect(result.assets[0]!.consumingDags).toEqual(["transform", "metrics"]);
+  });
+
+  it("airflow-list-asset-events orders by -timestamp by default and forwards filter args", async () => {
+    const { fn, calls } = makeFetchMock({
+      "/auth/token": () => new Response(JSON.stringify({ access_token: tokenResponse() }), { status: 200 }),
+      "/api/v2/assets/events": () =>
+        new Response(
+          JSON.stringify({
+            asset_events: [
+              {
+                id: 1,
+                asset_id: 7,
+                asset_uri: "s3://my-bucket/orders",
+                timestamp: "2026-05-29T22:00:00Z",
+                source_dag_id: "ingest",
+                source_run_id: "manual__2026-05-29T22:00",
+                source_task_id: "write_orders",
+                created_dagruns: [{ dag_id: "transform", dag_run_id: "scheduled__2026-05-29T22:05" }],
+              },
+            ],
+            total_entries: 1,
+          }),
+          { status: 200 },
+        ),
+    });
+    globalThis.fetch = fn;
+    const { airflowListAssetEvents } = await import("../src/tools/assets.js");
+    const result = (await airflowListAssetEvents({
+      assetId: 7,
+      timestampGte: "2026-05-29T00:00:00Z",
+      limit: 50,
+      offset: 0,
+      orderBy: "-timestamp",
+    })) as { events: Array<{ assetUri: string; triggeredDagRuns: Array<{ dagId: string }> }> };
+
+    const ev = calls.find((c) => c.url.includes("/api/v2/assets/events"));
+    expect(ev?.url).toContain("asset_id=7");
+    expect(ev?.url).toContain("timestamp_gte=2026-05-29T00%3A00%3A00Z");
+    expect(ev?.url).toContain("order_by=-timestamp");
+    expect(result.events[0]!.triggeredDagRuns[0]!.dagId).toBe("transform");
+  });
+
   it("auth/token failure surfaces structured AirflowApiError", async () => {
     const { fn } = makeFetchMock({
       "/auth/token": () => new Response(JSON.stringify({ detail: "Invalid credentials" }), { status: 401 }),

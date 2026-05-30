@@ -16,6 +16,11 @@ import {
   airflowTriggerDagSchema, airflowTriggerDag,
   airflowClearTaskSchema, airflowClearTask,
 } from "./tools/dags.js";
+import {
+  airflowListAssetsSchema, airflowListAssets,
+  airflowGetAssetSchema, airflowGetAsset,
+  airflowListAssetEventsSchema, airflowListAssetEvents,
+} from "./tools/assets.js";
 import { dagHealthRollupSchema, dagHealthRollup } from "./tools/aggregations.js";
 import { registry, searchToolsSchema, searchTools, type Category } from "./tool-registry.js";
 import { registerPrompts } from "./prompts/index.js";
@@ -49,6 +54,18 @@ tool("airflow-get-task-instances", "List task instances for a specific Airflow D
 tool("airflow-get-task-logs", "Fetch the tail (last N kB) of an Airflow task instance log for a specific try_number", airflowGetTaskLogsSchema.shape, wrapToolHandler(airflowGetTaskLogs));
 tool("airflow-trigger-dag", "Trigger a new Airflow DAG run with optional conf payload and note. Write-gated by AIRFLOW_ALLOW_WRITE.", airflowTriggerDagSchema.shape, wrapToolHandler(airflowTriggerDag));
 tool("airflow-clear-task", "Clear specific task instances in an Airflow DAG run (re-run them); supports include_upstream / include_downstream. Write-gated by AIRFLOW_ALLOW_WRITE.", airflowClearTaskSchema.shape, wrapToolHandler(airflowClearTask));
+
+tool("airflow-list-assets",
+  "List Airflow 3.x assets (replaces the legacy 'dataset' concept) with optional URI substring filter and DAG-id filter. Returns producing tasks + consuming DAGs per asset — the cross-DAG lineage answer to 'who writes this, who reads this?'",
+  airflowListAssetsSchema.shape, wrapToolHandler(airflowListAssets));
+
+tool("airflow-get-asset",
+  "Get one Airflow 3.x asset by numeric id, including producing tasks and consuming DAGs and the asset's extra metadata blob.",
+  airflowGetAssetSchema.shape, wrapToolHandler(airflowGetAsset));
+
+tool("airflow-list-asset-events",
+  "List Airflow 3.x asset materialization events (newest first by default). Each event names the source DAG/task/run plus any downstream DAG runs the materialization triggered. Filterable by assetId, sourceDagId, sourceRunId, sourceTaskId, and a timestamp window — pair with dbt-mcp lineage to trace cross-tool data flow.",
+  airflowListAssetEventsSchema.shape, wrapToolHandler(airflowListAssetEvents));
 
 tool("dag-health-rollup",
   "Aggregated DAG health: success-rate over the last N runs + count breakdown (succeeded/failed/queued) + average duration + last-failed-run id + (optional) failing task instances. Replaces the airflow-list-runs + airflow-get-task-instances combo for 'is this DAG healthy right now?'.",
