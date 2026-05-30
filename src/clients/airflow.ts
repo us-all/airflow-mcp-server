@@ -7,6 +7,7 @@ interface CachedToken {
 }
 
 let tokenCache: CachedToken | null = null;
+let inFlightTokenFetch: Promise<string> | null = null;
 const TOKEN_REFRESH_MARGIN_MS = 60_000; // refresh 1min early
 
 async function fetchJwtToken(): Promise<string> {
@@ -52,14 +53,27 @@ async function getValidToken(): Promise<string> {
   if (tokenCache && tokenCache.expiresAt - TOKEN_REFRESH_MARGIN_MS > now) {
     return tokenCache.token;
   }
-  const token = await fetchJwtToken();
-  const expiresAt = decodeJwtExp(token) ?? now + 23 * 60 * 60 * 1000; // fallback ~23h
-  tokenCache = { token, expiresAt };
-  return token;
+  // Coalesce concurrent refreshes — without this, N parallel tool calls that
+  // arrive on a cache miss each mint their own JWT, which Airflow may rate-limit
+  // or block as suspicious. The in-flight singleton is cleared in `finally` so a
+  // failed mint doesn't permanently poison the cache.
+  if (inFlightTokenFetch) return inFlightTokenFetch;
+  inFlightTokenFetch = (async () => {
+    try {
+      const token = await fetchJwtToken();
+      const expiresAt = decodeJwtExp(token) ?? Date.now() + 23 * 60 * 60 * 1000;
+      tokenCache = { token, expiresAt };
+      return token;
+    } finally {
+      inFlightTokenFetch = null;
+    }
+  })();
+  return inFlightTokenFetch;
 }
 
 export function _resetTokenCacheForTest(): void {
   tokenCache = null;
+  inFlightTokenFetch = null;
 }
 
 export async function airflowFetch<T = unknown>(

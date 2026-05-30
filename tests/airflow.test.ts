@@ -260,4 +260,47 @@ describe("airflow-mcp v0.2 (Airflow 3.x v2 API + JWT)", () => {
     const { airflowListDags } = await import("../src/tools/dags.js");
     await expect(airflowListDags({ onlyActive: true, limit: 10 })).rejects.toThrow(/auth\/token/);
   });
+
+  it("concurrent calls on a cold cache mint exactly one JWT (in-flight coalesce)", async () => {
+    let tokenMints = 0;
+    const { fn } = makeFetchMock({
+      "/auth/token": () => {
+        tokenMints += 1;
+        return new Response(JSON.stringify({ access_token: tokenResponse() }), { status: 200 });
+      },
+      "/api/v2/dags": () =>
+        new Response(JSON.stringify({ dags: [], total_entries: 0 }), { status: 200 }),
+    });
+    globalThis.fetch = fn;
+    const { airflowListDags } = await import("../src/tools/dags.js");
+    await Promise.all([
+      airflowListDags({ onlyActive: true, limit: 10 }),
+      airflowListDags({ onlyActive: true, limit: 10 }),
+      airflowListDags({ onlyActive: true, limit: 10 }),
+      airflowListDags({ onlyActive: true, limit: 10 }),
+      airflowListDags({ onlyActive: true, limit: 10 }),
+    ]);
+    expect(tokenMints).toBe(1);
+  });
+
+  it("token refresh after failed mint is not poisoned (in-flight cleared on error)", async () => {
+    let tokenAttempts = 0;
+    const { fn } = makeFetchMock({
+      "/auth/token": () => {
+        tokenAttempts += 1;
+        if (tokenAttempts === 1) {
+          return new Response(JSON.stringify({ detail: "boom" }), { status: 500 });
+        }
+        return new Response(JSON.stringify({ access_token: tokenResponse() }), { status: 200 });
+      },
+      "/api/v2/dags": () =>
+        new Response(JSON.stringify({ dags: [], total_entries: 0 }), { status: 200 }),
+    });
+    globalThis.fetch = fn;
+    const { airflowListDags } = await import("../src/tools/dags.js");
+    await expect(airflowListDags({ onlyActive: true, limit: 10 })).rejects.toThrow();
+    // Second call must be allowed to retry — not blocked by stale in-flight promise.
+    await airflowListDags({ onlyActive: true, limit: 10 });
+    expect(tokenAttempts).toBe(2);
+  });
 });
