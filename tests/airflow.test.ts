@@ -435,4 +435,89 @@ describe("airflow-mcp v0.2 (Airflow 3.x v2 API + JWT)", () => {
     await airflowListDags({ onlyActive: true, limit: 10 });
     expect(tokenAttempts).toBe(2);
   });
+
+  it("airflow-list-import-errors GETs /api/v2/importErrors newest-first and maps fields", async () => {
+    const { fn, calls } = makeFetchMock({
+      "/auth/token": () => new Response(JSON.stringify({ access_token: tokenResponse() }), { status: 200 }),
+      "/api/v2/importErrors": () => new Response(
+        JSON.stringify({
+          import_errors: [
+            {
+              import_error_id: 3,
+              filename: "dags/broken.py",
+              bundle_name: "dags-folder",
+              timestamp: "2026-06-18T05:00:00Z",
+              stack_trace: "ModuleNotFoundError: no module named 'foo'",
+            },
+          ],
+          total_entries: 1,
+        }),
+        { status: 200 },
+      ),
+    });
+    globalThis.fetch = fn;
+    const { airflowListImportErrors } = await import("../src/tools/admin.js");
+    const r = (await airflowListImportErrors({ limit: 50 })) as {
+      totalEntries: number;
+      importErrors: { filename: string; bundle: string; stackTrace: string }[];
+    };
+    const call = calls.find((c) => c.url.includes("/api/v2/importErrors"));
+    expect(call?.url).toContain("order_by=-timestamp");
+    expect(call?.method).toBe("GET");
+    expect(r.totalEntries).toBe(1);
+    expect(r.importErrors[0]!.filename).toBe("dags/broken.py");
+    expect(r.importErrors[0]!.bundle).toBe("dags-folder");
+    expect(r.importErrors[0]!.stackTrace).toContain("ModuleNotFoundError");
+  });
+
+  it("airflow-list-dag-warnings forwards dag_id + warning_type filters", async () => {
+    const { fn, calls } = makeFetchMock({
+      "/auth/token": () => new Response(JSON.stringify({ access_token: tokenResponse() }), { status: 200 }),
+      "/api/v2/dagWarnings": () => new Response(
+        JSON.stringify({
+          dag_warnings: [
+            { dag_id: "dbt_daily", warning_type: "non-existent pool", message: "Pool 'x' does not exist", timestamp: "2026-06-18T05:00:00Z" },
+          ],
+          total_entries: 1,
+        }),
+        { status: 200 },
+      ),
+    });
+    globalThis.fetch = fn;
+    const { airflowListDagWarnings } = await import("../src/tools/admin.js");
+    const r = (await airflowListDagWarnings({ dagId: "dbt_daily", warningType: "non-existent pool", limit: 50 })) as {
+      dagWarnings: { dagId: string; warningType: string; message: string }[];
+    };
+    const call = calls.find((c) => c.url.includes("/api/v2/dagWarnings"));
+    expect(call?.url).toContain("dag_id=dbt_daily");
+    expect(call?.url).toContain("warning_type=non-existent+pool");
+    expect(r.dagWarnings[0]!.warningType).toBe("non-existent pool");
+    expect(r.dagWarnings[0]!.message).toContain("does not exist");
+  });
+
+  it("airflow-list-pools maps slot utilization fields", async () => {
+    const { fn, calls } = makeFetchMock({
+      "/auth/token": () => new Response(JSON.stringify({ access_token: tokenResponse() }), { status: 200 }),
+      "/api/v2/pools": () => new Response(
+        JSON.stringify({
+          pools: [
+            { name: "default_pool", slots: 128, occupied_slots: 5, running_slots: 3, queued_slots: 2, open_slots: 123, description: "Default pool", include_deferred: false },
+          ],
+          total_entries: 1,
+        }),
+        { status: 200 },
+      ),
+    });
+    globalThis.fetch = fn;
+    const { airflowListPools } = await import("../src/tools/admin.js");
+    const r = (await airflowListPools({ limit: 50 })) as {
+      pools: { name: string; slots: number; openSlots: number; queuedSlots: number }[];
+    };
+    const call = calls.find((c) => c.url.includes("/api/v2/pools"));
+    expect(call?.method).toBe("GET");
+    expect(r.pools[0]!.name).toBe("default_pool");
+    expect(r.pools[0]!.slots).toBe(128);
+    expect(r.pools[0]!.openSlots).toBe(123);
+    expect(r.pools[0]!.queuedSlots).toBe(2);
+  });
 });

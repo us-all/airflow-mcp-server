@@ -21,6 +21,11 @@ import {
   airflowGetAssetSchema, airflowGetAsset,
   airflowListAssetEventsSchema, airflowListAssetEvents,
 } from "./tools/assets.js";
+import {
+  airflowListImportErrorsSchema, airflowListImportErrors,
+  airflowListDagWarningsSchema, airflowListDagWarnings,
+  airflowListPoolsSchema, airflowListPools,
+} from "./tools/admin.js";
 import { dagHealthRollupSchema, dagHealthRollup } from "./tools/aggregations.js";
 import { registry, searchToolsSchema, searchTools, type Category } from "./tool-registry.js";
 import { registerPrompts } from "./prompts/index.js";
@@ -66,6 +71,18 @@ tool("airflow-get-asset",
 tool("airflow-list-asset-events",
   "List Airflow 3.x asset materialization events (newest first by default). Each event names the source DAG/task/run plus any downstream DAG runs the materialization triggered. Filterable by assetId, sourceDagId, sourceRunId, sourceTaskId, and a timestamp window — pair with dbt-mcp lineage to trace cross-tool data flow.",
   airflowListAssetEventsSchema.shape, wrapToolHandler(airflowListAssetEvents));
+
+tool("airflow-list-import-errors",
+  "List DAG files that failed to parse (import errors) with filename, timestamp, and stack trace — the first thing to check when a DAG is 'missing' from list-dags. Newest first.",
+  airflowListImportErrorsSchema.shape, wrapToolHandler(airflowListImportErrors));
+
+tool("airflow-list-dag-warnings",
+  "List non-fatal DAG warnings (e.g. references to a non-existent pool, duplicate task ids) optionally filtered by dagId or warningType. Newest first.",
+  airflowListDagWarningsSchema.shape, wrapToolHandler(airflowListDagWarnings));
+
+tool("airflow-list-pools",
+  "List Airflow pools with slot utilization (slots / occupied / running / queued / open) — diagnose why tasks are stuck queued due to pool capacity.",
+  airflowListPoolsSchema.shape, wrapToolHandler(airflowListPools));
 
 tool("dag-health-rollup",
   "Aggregated DAG health: success-rate over the last N runs + count breakdown (succeeded/failed/queued) + average duration + last-failed-run id + (optional) failing task instances. Replaces the airflow-list-runs + airflow-get-task-instances combo for 'is this DAG healthy right now?'.",

@@ -4,7 +4,7 @@
 
 ## 프로젝트 개요
 
-`@us-all/airflow-mcp` — Airflow Stable REST API를 stdio MCP로 노출. **7 도구 + 2 Prompts**. read-only 기본, trigger/clear는 `AIRFLOW_ALLOW_WRITE=true` 게이트.
+`@us-all/airflow-mcp` — Airflow Stable REST API를 stdio MCP로 노출. **13 도구 + 2 Prompts**. read-only 기본, trigger/clear는 `AIRFLOW_ALLOW_WRITE=true` 게이트.
 
 - **타겟**: Airflow 3.0–3.2 `/api/v2` + JWT (SimpleAuthManager). 3.2.1까지 verified (2026-05 기준). Airflow 2.x basic auth는 v0.1.x로 핀.
 - **표준**: [@us-all MCP Standard](https://github.com/us-all/mcp-toolkit/blob/main/STANDARD.md) 준수
@@ -22,6 +22,8 @@ src/
 ├── tools/
 │   ├── utils.ts            # wrapToolHandler + WriteBlocked / AirflowApi 에러 클래스
 │   ├── dags.ts             # 6 도구 (list-dags, list-runs, task-instances, task-logs, trigger, clear)
+│   ├── assets.ts           # 3 도구 (list-assets, get-asset, list-asset-events) — 3.x asset 표면
+│   ├── admin.ts            # 3 도구 (list-import-errors, list-dag-warnings, list-pools) — 운영 진단 read
 │   └── aggregations.ts     # dag-health-rollup
 └── prompts/
     └── index.ts            # 2 Prompts (dag-failure-triage, dag-schedule-audit)
@@ -43,7 +45,7 @@ pnpm smoke              # AIRFLOW_API_URL 설정 후 spawn + tools/list + airflo
 
 | 카테고리 | 도구 수 | 토글 키 |
 |---------|--------|---------|
-| `airflow` | 6 + 1 aggregation | `AIRFLOW_TOOLS=airflow` |
+| `airflow` | 12 + 1 aggregation | `AIRFLOW_TOOLS=airflow` |
 | `meta`    | 1 (always) | — |
 
 ## 설계 원칙
