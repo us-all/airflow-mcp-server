@@ -25,6 +25,9 @@ import {
   airflowListImportErrorsSchema, airflowListImportErrors,
   airflowListDagWarningsSchema, airflowListDagWarnings,
   airflowListPoolsSchema, airflowListPools,
+  airflowListVariablesSchema, airflowListVariables,
+  airflowListConnectionsSchema, airflowListConnections,
+  airflowListEventLogsSchema, airflowListEventLogs,
 } from "./tools/admin.js";
 import { dagHealthRollupSchema, dagHealthRollup } from "./tools/aggregations.js";
 import { registry, searchToolsSchema, searchTools, type Category } from "./tool-registry.js";
@@ -83,6 +86,18 @@ tool("airflow-list-dag-warnings",
 tool("airflow-list-pools",
   "List Airflow pools with slot utilization (slots / occupied / running / queued / open) — diagnose why tasks are stuck queued due to pool capacity.",
   airflowListPoolsSchema.shape, wrapToolHandler(airflowListPools));
+
+tool("airflow-list-variables",
+  "List Airflow Variable keys + descriptions (values omitted to avoid leaking secrets) — see what configuration knobs exist.",
+  airflowListVariablesSchema.shape, wrapToolHandler(airflowListVariables));
+
+tool("airflow-list-connections",
+  "List Airflow connections (connection_id / conn_type / host / schema / login / port) — diagnose which external targets DAGs talk to. Passwords are never returned by the API.",
+  airflowListConnectionsSchema.shape, wrapToolHandler(airflowListConnections));
+
+tool("airflow-list-event-logs",
+  "List the Airflow event-log audit trail (newest first): DAG run / task state changes, config edits, etc. Filterable by dagId, taskId, runId, event.",
+  airflowListEventLogsSchema.shape, wrapToolHandler(airflowListEventLogs));
 
 tool("dag-health-rollup",
   "Aggregated DAG health: success-rate over the last N runs + count breakdown (succeeded/failed/queued) + average duration + last-failed-run id + (optional) failing task instances. Replaces the airflow-list-runs + airflow-get-task-instances combo for 'is this DAG healthy right now?'.",

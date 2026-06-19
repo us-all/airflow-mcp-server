@@ -520,4 +520,78 @@ describe("airflow-mcp v0.2 (Airflow 3.x v2 API + JWT)", () => {
     expect(r.pools[0]!.openSlots).toBe(123);
     expect(r.pools[0]!.queuedSlots).toBe(2);
   });
+
+  it("airflow-list-variables returns keys + descriptions only (no values)", async () => {
+    const { fn } = makeFetchMock({
+      "/auth/token": () => new Response(JSON.stringify({ access_token: tokenResponse() }), { status: 200 }),
+      "/api/v2/variables": () => new Response(
+        JSON.stringify({
+          variables: [
+            { key: "slack_webhook", value: "https://hooks.slack.com/SECRET", description: "alert webhook" },
+          ],
+          total_entries: 1,
+        }),
+        { status: 200 },
+      ),
+    });
+    globalThis.fetch = fn;
+    const { airflowListVariables } = await import("../src/tools/admin.js");
+    const r = (await airflowListVariables({ limit: 100 })) as {
+      variables: Record<string, unknown>[];
+    };
+    expect(r.variables[0]!.key).toBe("slack_webhook");
+    expect(r.variables[0]!.description).toBe("alert webhook");
+    expect("value" in r.variables[0]!).toBe(false);
+    expect(JSON.stringify(r)).not.toContain("SECRET");
+  });
+
+  it("airflow-list-connections maps fields and never exposes a password", async () => {
+    const { fn } = makeFetchMock({
+      "/auth/token": () => new Response(JSON.stringify({ access_token: tokenResponse() }), { status: 200 }),
+      "/api/v2/connections": () => new Response(
+        JSON.stringify({
+          connections: [
+            { connection_id: "gcp_bq", conn_type: "google_cloud_platform", host: "bigquery", schema: "us_campus", login: "svc@x", port: null, description: "BQ" },
+          ],
+          total_entries: 1,
+        }),
+        { status: 200 },
+      ),
+    });
+    globalThis.fetch = fn;
+    const { airflowListConnections } = await import("../src/tools/admin.js");
+    const r = (await airflowListConnections({ limit: 100 })) as {
+      connections: { connectionId: string; connType: string; login: string }[];
+    };
+    expect(r.connections[0]!.connectionId).toBe("gcp_bq");
+    expect(r.connections[0]!.connType).toBe("google_cloud_platform");
+    expect(r.connections[0]!.login).toBe("svc@x");
+    expect(JSON.stringify(r)).not.toMatch(/password/i);
+  });
+
+  it("airflow-list-event-logs orders by -when and forwards dag_id + event filters", async () => {
+    const { fn, calls } = makeFetchMock({
+      "/auth/token": () => new Response(JSON.stringify({ access_token: tokenResponse() }), { status: 200 }),
+      "/api/v2/eventLogs": () => new Response(
+        JSON.stringify({
+          event_logs: [
+            { event_log_id: 99, when: "2026-06-19T05:00:00Z", event: "failed", dag_id: "dbt_daily", task_id: "dbt_run", run_id: "scheduled__x", owner: "airflow" },
+          ],
+          total_entries: 1,
+        }),
+        { status: 200 },
+      ),
+    });
+    globalThis.fetch = fn;
+    const { airflowListEventLogs } = await import("../src/tools/admin.js");
+    const r = (await airflowListEventLogs({ dagId: "dbt_daily", event: "failed", limit: 50 })) as {
+      eventLogs: { event: string; dagId: string; when: string }[];
+    };
+    const call = calls.find((c) => c.url.includes("/api/v2/eventLogs"));
+    expect(call?.url).toContain("order_by=-when");
+    expect(call?.url).toContain("dag_id=dbt_daily");
+    expect(call?.url).toContain("event=failed");
+    expect(r.eventLogs[0]!.event).toBe("failed");
+    expect(r.eventLogs[0]!.dagId).toBe("dbt_daily");
+  });
 });
