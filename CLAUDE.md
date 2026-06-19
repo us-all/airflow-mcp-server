@@ -10,6 +10,10 @@
 - **표준**: [@us-all MCP Standard](https://github.com/us-all/mcp-toolkit/blob/main/STANDARD.md) 준수
 - **Companion**: dbt 자산은 별도 [`@us-all/dbt-mcp`](https://github.com/us-all/dbt-mcp-server)
 
+## 최근 변경사항
+
+- **v1.4.1** (2026-06-19): MCP tool annotations 적용 — `@us-all/mcp-toolkit ^1.3.0`의 `inferToolAnnotations`를 중앙 `tool()` 헬퍼에 추가, 전 도구에 readOnlyHint/destructiveHint/openWorldHint 자동 부여 (`airflow-` prefix는 toolkit이 자동 strip, override 0). 비파괴 패치. PASS build / PASS test.
+
 ## 디렉토리
 
 ```
