@@ -1,6 +1,6 @@
 {
   "name": "@us-all/airflow-mcp",
-  "version": "1.2.2",
+  "version": "1.3.0",
   "mcpName": "io.github.us-all/airflow",
   "description": "Airflow MCP server — DAG list, runs, task instances, log tails, trigger and clear over the Airflow REST API",
   "type": "module",
